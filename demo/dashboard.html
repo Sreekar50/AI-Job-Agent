@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AI Job Agent — Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+  .header { background: #1e293b; border-bottom: 1px solid #334155; padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+  .header h1 { font-size: 20px; font-weight: 700; }
+  .header .dot { width: 10px; height: 10px; border-radius: 50%; background: #22c55e; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; }
+  .card h2 { font-size: 14px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px; }
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat { background: #0f172a; border-radius: 8px; padding: 16px; text-align: center; }
+  .stat .value { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+  .stat .label { font-size: 12px; color: #64748b; }
+  .queued { color: #60a5fa; } .in_progress { color: #f59e0b; } .applied { color: #22c55e; } .failed { color: #ef4444; } .backlog { color: #a78bfa; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+  .badge.queued { background: #1d4ed820; color: #60a5fa; }
+  .badge.in_progress { background: #92400e20; color: #f59e0b; }
+  .badge.applied { background: #14532d20; color: #22c55e; }
+  .badge.failed { background: #7f1d1d20; color: #ef4444; }
+  .badge.backlog { background: #4c1d9520; color: #a78bfa; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 8px 12px; color: #64748b; font-weight: 500; border-bottom: 1px solid #334155; }
+  td { padding: 10px 12px; border-bottom: 1px solid #1e293b; }
+  tr:hover td { background: #0f172a50; }
+  .hitl-alert { background: #451a03; border: 1px solid #92400e; border-radius: 12px; padding: 20px; margin-bottom: 20px; display: none; }
+  .hitl-alert.active { display: block; }
+  .hitl-alert h3 { color: #f59e0b; font-size: 16px; margin-bottom: 12px; }
+  .hitl-field { margin-bottom: 8px; font-size: 13px; }
+  .hitl-field span { color: #94a3b8; }
+  .hitl-input { display: flex; gap: 8px; margin-top: 12px; }
+  .hitl-input input { flex: 1; background: #1e293b; border: 1px solid #92400e; border-radius: 8px; padding: 8px 12px; color: #e2e8f0; font-size: 14px; outline: none; }
+  .hitl-input input:focus { border-color: #f59e0b; }
+  .btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; }
+  .btn-primary { background: #3b82f6; color: white; }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-warn { background: #f59e0b; color: #0f172a; }
+  .btn-warn:hover { background: #d97706; }
+  .countdown { font-size: 24px; font-weight: 700; color: #f59e0b; text-align: center; margin: 8px 0; }
+  .log-list { max-height: 260px; overflow-y: auto; font-size: 12px; font-family: monospace; }
+  .log-item { padding: 4px 8px; border-radius: 4px; margin-bottom: 3px; }
+  .log-item.hitl { background: #451a0340; color: #f59e0b; }
+  .log-item.info { color: #94a3b8; }
+  .log-item.success { color: #22c55e; }
+  .log-item.error { color: #ef4444; }
+  .ws-status { font-size: 12px; color: #ef4444; margin-left: auto; }
+  .ws-status.connected { color: #22c55e; }
+  .add-url { display: flex; gap: 8px; margin-top: 12px; }
+  .add-url input { flex: 1; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 8px 12px; color: #e2e8f0; font-size: 13px; outline: none; }
+  .add-url input:focus { border-color: #3b82f6; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="dot"></div>
+  <h1>🤖 AI Job Application Agent</h1>
+  <span class="ws-status" id="ws-status">⚡ Connecting...</span>
+</div>
+
+<div class="container">
+
+  <!-- HITL Alert -->
+  <div class="hitl-alert" id="hitl-alert">
+    <h3>🚨 Human Input Required</h3>
+    <div class="hitl-field"><span>Job:</span> <strong id="hitl-job-id">—</strong></div>
+    <div class="hitl-field"><span>Field:</span> <strong id="hitl-field-label">—</strong></div>
+    <div class="hitl-field"><span>Type:</span> <span id="hitl-field-type">—</span></div>
+    <div class="hitl-field"><span>Options:</span> <span id="hitl-field-options">—</span></div>
+    <div class="hitl-field"><span>Context:</span> <span id="hitl-context">—</span></div>
+    <div class="countdown" id="hitl-countdown">30s</div>
+    <div class="hitl-input">
+      <input type="text" id="hitl-answer-input" placeholder="Type your answer..." />
+      <button class="btn btn-warn" onclick="submitHITL()">Submit Answer</button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stat-grid">
+    <div class="stat"><div class="value queued" id="stat-queued">—</div><div class="label">Queued</div></div>
+    <div class="stat"><div class="value in_progress" id="stat-in-progress">—</div><div class="label">In Progress</div></div>
+    <div class="stat"><div class="value applied" id="stat-applied">—</div><div class="label">Applied</div></div>
+    <div class="stat"><div class="value failed" id="stat-failed">—</div><div class="label">Failed / Backlog</div></div>
+  </div>
+
+  <div class="grid">
+    <!-- Jobs -->
+    <div class="card" style="grid-column: span 2;">
+      <h2>Job Queue</h2>
+      <table>
+        <thead><tr><th>Company</th><th>Title</th><th>ATS</th><th>Status</th><th>URL</th><th>Action</th></tr></thead>
+        <tbody id="jobs-table"></tbody>
+      </table>
+      <div class="add-url">
+        <input type="text" id="new-job-url" placeholder="Paste job URL to add to queue..." />
+        <button class="btn btn-primary" onclick="addJob()">+ Add Job</button>
+      </div>
+    </div>
+
+    <!-- Logs -->
+    <div class="card" style="grid-column: span 2;">
+      <h2>Agent Logs</h2>
+      <div class="log-list" id="log-list"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+const WS_URL = 'ws://localhost:8000/ws/agent';
+
+let ws;
+let candidateId;
+let hitlJobId;
+let hitlCountdownInterval;
+
+// ── WebSocket ──
+function connectWS() {
+  ws = new WebSocket(WS_URL);
+  ws.onopen = () => {
+    document.getElementById('ws-status').textContent = '● Connected';
+    document.getElementById('ws-status').className = 'ws-status connected';
+    addLog('WebSocket connected', 'info');
+  };
+  ws.onclose = () => {
+    document.getElementById('ws-status').textContent = '⚡ Disconnected — retrying...';
+    document.getElementById('ws-status').className = 'ws-status';
+    setTimeout(connectWS, 3000);
+  };
+  ws.onmessage = (evt) => {
+    const msg = JSON.parse(evt.data);
+    if (msg.type === 'hitl_request' || (msg.type === 'pending_hitl' && msg.requests?.length)) {
+      const req = msg.type === 'hitl_request' ? msg : msg.requests[0];
+      showHITL(req);
+    } else if (msg.type === 'hitl_answer_ack') {
+      addLog(`HITL answer ack: job ${msg.job_id} — ${msg.success ? '✅ accepted' : '❌ failed'}`, msg.success ? 'success' : 'error');
+      hideHITL();
+    }
+  };
+}
+
+// ── HITL ──
+function showHITL(req) {
+  hitlJobId = req.job_id;
+  document.getElementById('hitl-job-id').textContent = req.job_id;
+  document.getElementById('hitl-field-label').textContent = req.field_label;
+  document.getElementById('hitl-field-type').textContent = req.field_type;
+  document.getElementById('hitl-field-options').textContent = req.field_options ? req.field_options.join(', ') : 'Free text';
+  document.getElementById('hitl-context').textContent = req.context || '';
+  document.getElementById('hitl-alert').classList.add('active');
+  addLog(`🚨 HITL: "${req.field_label}" for job ${req.job_id}`, 'hitl');
+
+  let remaining = req.timeout_seconds || 30;
+  clearInterval(hitlCountdownInterval);
+  hitlCountdownInterval = setInterval(() => {
+    remaining--;
+    document.getElementById('hitl-countdown').textContent = `${remaining}s`;
+    if (remaining <= 0) {
+      clearInterval(hitlCountdownInterval);
+      hideHITL();
+      addLog(`⌛ HITL timeout for job ${hitlJobId} — moved to backlog`, 'error');
+    }
+  }, 1000);
+}
+
+function hideHITL() {
+  clearInterval(hitlCountdownInterval);
+  document.getElementById('hitl-alert').classList.remove('active');
+  document.getElementById('hitl-answer-input').value = '';
+}
+
+function submitHITL() {
+  const answer = document.getElementById('hitl-answer-input').value.trim();
+  if (!answer || !hitlJobId) return;
+  ws.send(JSON.stringify({ type: 'hitl_answer', job_id: hitlJobId, answer }));
+}
+
+document.getElementById('hitl-answer-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitHITL();
+});
+
+// ── Data Loading ──
+async function loadData() {
+  try {
+    // Get candidates
+    const cResp = await fetch(`${API}/api/candidates`);
+    const candidates = await cResp.json();
+    if (candidates.length) candidateId = candidates[0].id;
+
+    // Get jobs
+    const jResp = await fetch(`${API}/api/jobs`);
+    const jobs = await jResp.json();
+    renderJobs(jobs);
+    updateStats(jobs);
+  } catch (e) {
+    addLog(`Load error: ${e.message}`, 'error');
+  }
+}
+
+function renderJobs(jobs) {
+  const tbody = document.getElementById('jobs-table');
+  tbody.innerHTML = jobs.map(j => `
+    <tr>
+      <td>${j.company || '—'}</td>
+      <td>${j.title || '—'}</td>
+      <td><span style="font-size:11px;color:#64748b">${j.ats_platform || 'unknown'}</span></td>
+      <td><span class="badge ${j.status}">${j.status}</span></td>
+      <td><a href="${j.url}" target="_blank" style="color:#60a5fa;font-size:12px">${j.url.slice(0,45)}...</a></td>
+      <td>
+        ${['queued','failed','backlog'].includes(j.status) ?
+          `<button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="runJob('${j.id}')">▶ Run</button>` : ''}
+      </td>
+    </tr>
+  `).join('');
+}
+
+function updateStats(jobs) {
+  const counts = {queued:0, in_progress:0, applied:0, failed:0, backlog:0};
+  jobs.forEach(j => counts[j.status] = (counts[j.status]||0) + 1);
+  document.getElementById('stat-queued').textContent = counts.queued;
+  document.getElementById('stat-in-progress').textContent = counts.in_progress;
+  document.getElementById('stat-applied').textContent = counts.applied;
+  document.getElementById('stat-failed').textContent = (counts.failed||0) + (counts.backlog||0);
+}
+
+async function runJob(jobId) {
+  addLog(`Starting agent for job ${jobId}...`, 'info');
+  await fetch(`${API}/api/jobs/${jobId}/run`, { method: 'POST' });
+  setTimeout(loadData, 1000);
+}
+
+async function addJob() {
+  const url = document.getElementById('new-job-url').value.trim();
+  if (!url || !candidateId) return;
+  await fetch(`${API}/api/jobs`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ candidate_id: candidateId, url })
+  });
+  document.getElementById('new-job-url').value = '';
+  addLog(`Added job: ${url.slice(0,50)}`, 'success');
+  loadData();
+}
+
+function addLog(msg, type='info') {
+  const list = document.getElementById('log-list');
+  const ts = new Date().toLocaleTimeString();
+  const div = document.createElement('div');
+  div.className = `log-item ${type}`;
+  div.textContent = `[${ts}] ${msg}`;
+  list.prepend(div);
+  if (list.children.length > 100) list.removeChild(list.lastChild);
+}
+
+// ── Init ──
+connectWS();
+loadData();
+setInterval(loadData, 5000);
+</script>
+</body>
+</html>
